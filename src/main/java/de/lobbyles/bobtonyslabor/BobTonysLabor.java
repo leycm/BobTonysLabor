@@ -1,5 +1,6 @@
 package de.lobbyles.bobtonyslabor;
 
+import de.lobbyles.bobtonyslabor.boby.User;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
@@ -63,6 +64,7 @@ public final class BobTonysLabor extends JavaPlugin {
     public String registerListener(){
         PluginManager pluginManager = Bukkit.getPluginManager();
         try{
+            pluginManager.registerEvents(new User.UserListener(),this);
             return "\u001B[90mLoading eventlistener...\u001B[0m";
         } catch (Exception e){
             return c6 + "Fail to load eventlistener\n" + e;
