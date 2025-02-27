@@ -3,54 +3,43 @@ package de.lobbyles.bobtonyslabor.boby;
 import lombok.Getter;
 import lombok.Setter;
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.entity.Player;
-import org.bukkit.event.Listener;
 
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
-import static de.lobbyles.bobtonyslabor.BobTonysLabor.*;
+import static de.lobbyles.bobtonyslabor.BobTonysLabor.PLUGIN_FOLDER;
 
 @Getter
 @Setter
-public class User implements Listener {
-    private final Player player;
-    private NameTag nameTag;
+public class OfflineUser {
+    private final OfflinePlayer offlinePlayer;
     private FileConfiguration playerFile;
-    private HashMap<String, PlayerLoginInfo> loginHistory;
+    private HashMap<String, User.PlayerLoginInfo> loginHistory;
     private TonyMode mode;
     private String lastKnownLocation;
     private String lastISP;
     private String operatingSystem;
-    private int ping;
     private String clientVersion;
     private LocalDateTime firstJoin;
     private LocalDateTime lastJoin;
 
-    private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final Logger LOGGER = Bukkit.getLogger();
 
-    public User(Player player) {
-        this.player = player;
+    public OfflineUser(OfflinePlayer offlinePlayer) {
+        this.offlinePlayer = offlinePlayer;
         this.mode = TonyMode.MEMBER;
         this.loginHistory = new HashMap<>();
-        this.playerFile = loadConfig(player.getUniqueId().toString());
-        List<String> list = new ArrayList<>();
-        list.add(player.getDisplayName());
-        this.nameTag = new NameTag(list);
-        spawnNameTags();
+        this.playerFile = loadConfig(offlinePlayer.getUniqueId().toString());
 
-        File file = new File(PLUGIN_FOLDER + "/playerdata", player.getUniqueId() + ".yml");
+        File file = new File(PLUGIN_FOLDER + "/playerdata", offlinePlayer.getUniqueId() + ".yml");
         if (file.exists()) {
             reload();
         } else {
@@ -60,51 +49,8 @@ public class User implements Listener {
         }
     }
 
-    @Getter
-    @Setter
-    public static class PlayerLoginInfo {
-        private String ip;
-        private String location;
-        private String isp;
-        private String operatingSystem;
-        private String clientVersion;
-        private LocalDateTime timestamp;
-
-        public PlayerLoginInfo(String ip, String location, String isp, String os, String clientVersion) {
-            this.ip = ip;
-            this.location = location;
-            this.isp = isp;
-            this.operatingSystem = os;
-            this.clientVersion = clientVersion;
-            this.timestamp = LocalDateTime.now();
-        }
-
-        // For loading from config
-        public PlayerLoginInfo(String ip, String location, String isp, String os, String clientVersion, LocalDateTime timestamp) {
-            this.ip = ip;
-            this.location = location;
-            this.isp = isp;
-            this.operatingSystem = os;
-            this.clientVersion = clientVersion;
-            this.timestamp = timestamp;
-        }
-
-        @Override
-        public String toString() {
-            return "IP: " + ip +
-                    ", Location: " + location +
-                    ", ISP: " + isp +
-                    ", OS: " + operatingSystem +
-                    ", Client: " + clientVersion;
-        }
-    }
-
-    public void killNameTags(){nameTag.killNameTag();}
-    public void spawnNameTags(){nameTag.spawnNameTag(player);}
-    public void setNameTags(List<String> lines){(nameTag = new NameTag(lines)).reloadNameTag(player);}
-
     public void reload() {
-        playerFile = loadConfig(player.getUniqueId().toString());
+        playerFile = loadConfig(offlinePlayer.getUniqueId().toString());
         if (playerFile == null) return;
 
         String modeStr = playerFile.getString("player.mode", "MEMBER");
@@ -129,7 +75,7 @@ public class User implements Listener {
                         timestamp = LocalDateTime.now();
                     }
 
-                    PlayerLoginInfo info = new PlayerLoginInfo(ip, location, isp, os, client, timestamp);
+                    User.PlayerLoginInfo info = new User.PlayerLoginInfo(ip, location, isp, os, client, timestamp);
                     loginHistory.put(timeKey, info);
                 }
             }
@@ -156,7 +102,9 @@ public class User implements Listener {
                 lastJoin = LocalDateTime.now();
             }
         } catch (Exception e) {
-            LOGGER.warning("Error parsing dates for player " + player.getName() + ": " + e.getMessage());
+            LOGGER.warning("Error parsing dates for player " +
+                    (offlinePlayer.getName() != null ? offlinePlayer.getName() : offlinePlayer.getUniqueId()) +
+                    ": " + e.getMessage());
             firstJoin = LocalDateTime.now();
             lastJoin = LocalDateTime.now();
         }
@@ -166,9 +114,11 @@ public class User implements Listener {
         if (playerFile == null) return;
 
         // Save player data
-        playerFile.set("player.name", player.getName());
-        playerFile.set("player.uuid", player.getUniqueId().toString());
-        playerFile.set("player.playtime", player.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE));
+        playerFile.set("player.name", offlinePlayer.getName());
+        playerFile.set("player.uuid", offlinePlayer.getUniqueId().toString());
+        if (offlinePlayer.isOnline() && offlinePlayer.getPlayer() != null) {
+            playerFile.set("player.playtime", offlinePlayer.getPlayer().getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE));
+        }
         playerFile.set("player.mode", mode.toString());
 
         playerFile.set("user.lastLocation", lastKnownLocation);
@@ -179,9 +129,9 @@ public class User implements Listener {
         playerFile.set("user.lastJoin", lastJoin.toString());
 
         playerFile.set("user.logins", null);
-        for (Map.Entry<String, PlayerLoginInfo> entry : loginHistory.entrySet()) {
+        for (Map.Entry<String, User.PlayerLoginInfo> entry : loginHistory.entrySet()) {
             String timeKey = entry.getKey();
-            PlayerLoginInfo info = entry.getValue();
+            User.PlayerLoginInfo info = entry.getValue();
 
             playerFile.set("user.logins." + timeKey + ".ip", info.getIp());
             playerFile.set("user.logins." + timeKey + ".location", info.getLocation());
@@ -191,7 +141,7 @@ public class User implements Listener {
             playerFile.set("user.logins." + timeKey + ".timestamp", info.getTimestamp().toString());
         }
 
-        saveConfig(playerFile, player.getUniqueId().toString());
+        saveConfig(playerFile, offlinePlayer.getUniqueId().toString());
     }
 
     private FileConfiguration createConfig(String title) {
@@ -223,5 +173,34 @@ public class User implements Listener {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public User.PlayerLoginInfo getLastLoginInfo() {
+        if (loginHistory.isEmpty()) {
+            return null;
+        }
+
+        User.PlayerLoginInfo latestInfo = null;
+        LocalDateTime latestTime = LocalDateTime.MIN;
+
+        for (User.PlayerLoginInfo info : loginHistory.values()) {
+            if (info.getTimestamp().isAfter(latestTime)) {
+                latestTime = info.getTimestamp();
+                latestInfo = info;
+            }
+        }
+
+        return latestInfo;
+    }
+
+    public boolean isOnline() {
+        return offlinePlayer.isOnline() && offlinePlayer.getPlayer() != null;
+    }
+
+    public User toOnlineUser() {
+        if (isOnline()) {
+            return UserBase.getUser(offlinePlayer.getPlayer());
+        }
+        return null;
     }
 }

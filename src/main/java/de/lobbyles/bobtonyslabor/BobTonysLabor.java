@@ -1,11 +1,15 @@
 package de.lobbyles.bobtonyslabor;
 
-import de.lobbyles.bobtonyslabor.boby.User;
+import de.lobbyles.bobtonyslabor.boby.UserCommand;
+import de.lobbyles.bobtonyslabor.boby.UserListener;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.ScoreboardManager;
+import org.bukkit.scoreboard.Team;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,11 +22,13 @@ public final class BobTonysLabor extends JavaPlugin {
 
     public static Logger logger;
     public static CommandSender console;
+    public static int aircrafter;
 
+    public static Team team;
 
     public static final String PREFIX = "§3§lBob§b§lTony §8>§7";
     public static final String CONSOLE_PREFIX = "\u001B[0m[BobTony][BobTonyLabor] \u001B[0m";
-    public static final String PLUGIN_FOLDER = "bobtony";
+    public static final String PLUGIN_FOLDER = "../bobtony";
 
     String c0 = "\u001B[0m";
     String c3 = "\u001B[36m";
@@ -36,9 +42,12 @@ public final class BobTonysLabor extends JavaPlugin {
         plugin = BobTonysLabor.getPlugin(BobTonysLabor.class);
         javaPlugin = JavaPlugin.getPlugin(BobTonysLabor.class);
         instance = this;
+        aircrafter = 0;
 
         logger = plugin.getLogger();
         console = Bukkit.getConsoleSender();
+
+        createVanillaStyleTeam();
 
         List<String> enable = new ArrayList<>();
         enable.add(registerListener());
@@ -64,7 +73,7 @@ public final class BobTonysLabor extends JavaPlugin {
     public String registerListener(){
         PluginManager pluginManager = Bukkit.getPluginManager();
         try{
-            pluginManager.registerEvents(new User.UserListener(),this);
+            pluginManager.registerEvents(new UserListener(),this);
             return "\u001B[90mLoading eventlistener...\u001B[0m";
         } catch (Exception e){
             return c6 + "Fail to load eventlistener\n" + e;
@@ -81,6 +90,7 @@ public final class BobTonysLabor extends JavaPlugin {
 
     public String registerCommands(){
         try{
+            getCommand("user").setExecutor(new UserCommand());
             return "\u001B[90mLoading commands...\u001B[0m";
         } catch (Exception e){
             return c6 + "Fail to load commands\n" + e;
@@ -102,4 +112,20 @@ public final class BobTonysLabor extends JavaPlugin {
             console.sendMessage(CONSOLE_PREFIX +"Finish Loading [BobTony]\u001B[0m");
         }
     }
+
+    private void createVanillaStyleTeam() {
+        ScoreboardManager manager = Bukkit.getScoreboardManager();
+        if (manager == null) return;
+
+        Scoreboard board = manager.getMainScoreboard(); // Vanilla-Scoreboard verwenden
+
+        team = board.getTeam("playerbase");
+        if (team == null) {
+            team = board.registerNewTeam("playerbase");
+            team.setOption(Team.Option.NAME_TAG_VISIBILITY, Team.OptionStatus.NEVER);
+            team.setOption(Team.Option.COLLISION_RULE, Team.OptionStatus.NEVER);
+            team.setAllowFriendlyFire(false);
+        }
+    }
+
 }

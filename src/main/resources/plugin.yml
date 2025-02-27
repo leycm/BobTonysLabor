@@ -2,3 +2,8 @@ name: BobTonysLabor
 version: '1.0.1'
 main: de.lobbyles.bobtonyslabor.BobTonysLabor
 api-version: '1.21'
+commands:
+  user:
+    permission: bobtony.command.userinfo.use
+    aliases: [userinfo, useradmin]
+
