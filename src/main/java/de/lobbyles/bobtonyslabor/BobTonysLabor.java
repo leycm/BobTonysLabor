@@ -2,6 +2,7 @@ package de.lobbyles.bobtonyslabor;
 
 import de.lobbyles.bobtonyslabor.boby.UserCommand;
 import de.lobbyles.bobtonyslabor.boby.UserListener;
+import de.lobbyles.bobtonyslabor.essetials.Mode;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
@@ -74,6 +75,7 @@ public final class BobTonysLabor extends JavaPlugin {
         PluginManager pluginManager = Bukkit.getPluginManager();
         try{
             pluginManager.registerEvents(new UserListener(),this);
+            pluginManager.registerEvents(new Mode(),this);
             return "\u001B[90mLoading eventlistener...\u001B[0m";
         } catch (Exception e){
             return c6 + "Fail to load eventlistener\n" + e;
@@ -91,6 +93,7 @@ public final class BobTonysLabor extends JavaPlugin {
     public String registerCommands(){
         try{
             getCommand("user").setExecutor(new UserCommand());
+            getCommand("mode").setExecutor(new Mode());
             return "\u001B[90mLoading commands...\u001B[0m";
         } catch (Exception e){
             return c6 + "Fail to load commands\n" + e;
@@ -102,10 +105,10 @@ public final class BobTonysLabor extends JavaPlugin {
     private void consolFeedback(List<String> list) {
 
         if(!Bukkit.getPluginManager().isPluginEnabled("BobTony")){
-            console.sendMessage(c3 + "   __ "+cb+"        " + c7 + "                         " + c0);
-            console.sendMessage(c3 + "  |   "+cb+" |      " + c3 + "§3§lBob§b§lTony " +c0+ "v-1.0.1         " + c0);
-            console.sendMessage(c3 + "  |__ "+cb+" |___   " + c8 + "Running on Bukkit - "+cb+"Paper" + c0);
-            console.sendMessage(c3 + "       "+cb+"        " + c7 + "                         " + c0);
+            console.sendMessage(c3 + "   __  "+cb+"  ___  " + c7 + "                         " + c0);
+            console.sendMessage(c3 + "  |__| "+cb+"   |   " + c3 + "§3§lBob§b§lTony " +c0+ "v-1.0.1         " + c0);
+            console.sendMessage(c3 + "  |__| "+cb+"   |   " + c8 + "Running on Bukkit - "+cb+"Paper" + c0);
+            console.sendMessage(c3 + "       "+cb+"       " + c7 + "                         " + c0);
             for (String s  : list) {
                 console.sendMessage( CONSOLE_PREFIX+s);
             }

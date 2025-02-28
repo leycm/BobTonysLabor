@@ -12,6 +12,10 @@ public enum TonyMode {
         this.lvl = lvl;
     }
 
+    public int lvl(){
+        return this.lvl;
+    }
+
     public static TonyMode fromString(String s){
         try{
             return TonyMode.valueOf(s.toUpperCase());

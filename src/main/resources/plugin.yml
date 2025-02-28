@@ -6,4 +6,6 @@ commands:
   user:
     permission: bobtony.command.userinfo.use
     aliases: [userinfo, useradmin]
+  mode:
+    permission: bobtony.command.userinfo.use
 

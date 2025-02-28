@@ -289,7 +289,6 @@ public class UserCommand implements CommandExecutor, TabCompleter {
                         HashMap<Integer, HashMap<String, Object>> lines = onlineUser.getNameTag().getLines();
                         List<String> linesList = new ArrayList<>();
 
-                        // Convert current lines to list format for setNameTags method
                         for (int i = 0; i < Math.max(lines.size(), lineNumber + 1); i++) {
                             if (i == lineNumber) {
                                 linesList.add(lineText);
