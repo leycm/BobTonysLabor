@@ -10,19 +10,15 @@ import org.bukkit.entity.Player;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
-
-import static java.lang.Integer.parseInt;
 
 public class UserCommand implements CommandExecutor, TabCompleter {
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String ERROR_PREFIX = "§c";
+    private static final String INFO_PREFIX = "§e";
+    private static final String HEADER_PREFIX = "§6";
 
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
@@ -33,10 +29,8 @@ public class UserCommand implements CommandExecutor, TabCompleter {
 
         switch (args[0].toLowerCase()) {
             case "online":
-                handleOnlineUser(sender, args);
-                break;
             case "all":
-                handleAllUser(sender, args);
+                handleUserCommand(sender, args);
                 break;
             default:
                 sendHelp(sender);
@@ -46,122 +40,82 @@ public class UserCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    private void handleOnlineUser(CommandSender sender, String[] args) {
+    private void handleUserCommand(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage("§cBenutzung: /user online <spielername> <data/info/profile>");
+            sender.sendMessage(ERROR_PREFIX + "Benutzung: /user " + args[0] + " <spielername> <data/info/profile>");
             return;
         }
 
         String playerName = args[1];
-        Player player = Bukkit.getPlayer(playerName);
-        if (player == null) {
-            sender.sendMessage("§cSpieler " + playerName + " ist nicht online.");
-            return;
-        }
-
-        User user = UserBase.getUser(player);
-        if (user == null) {
-            sender.sendMessage("§cBenutzer nicht gefunden.");
-            return;
-        }
-
         String subCommand = args[2].toLowerCase();
+        boolean isOnlineOnly = args[0].equalsIgnoreCase("online");
+
+        UserWrapper userWrapper = findUser(playerName, isOnlineOnly);
+
+        if (userWrapper == null) {
+            sender.sendMessage(ERROR_PREFIX + "Spieler " + playerName + (isOnlineOnly ? " ist nicht online." : " nicht gefunden."));
+            return;
+        }
+
         switch (subCommand) {
             case "info":
-                sendUserInfo(sender, user);
+                sendUserInfo(sender, userWrapper);
                 break;
             case "data":
-                handleUserData(sender, args, user, null);
+                handleUserData(sender, args, userWrapper);
                 break;
             case "profile":
-                handleUserProfile(sender, args, user, null);
+                handleUserProfile(sender, args, userWrapper);
                 break;
             default:
-                sender.sendMessage("§cUngültiger Parameter. Benutze 'info', 'data' oder 'profile'.");
+                sender.sendMessage(ERROR_PREFIX + "Ungültiger Parameter. Benutze 'info', 'data' oder 'profile'.");
                 break;
         }
     }
 
-    private void handleAllUser(CommandSender sender, String[] args) {
-        if (args.length < 3) {
-            sender.sendMessage("§cBenutzung: /user all <spielername> <data/info/profile>");
-            return;
-        }
-
-        String playerName = args[1];
+    private UserWrapper findUser(String playerName, boolean onlineOnly) {
         Player onlinePlayer = Bukkit.getPlayer(playerName);
-
         if (onlinePlayer != null) {
             User user = UserBase.getUser(onlinePlayer);
             if (user != null) {
-                String subCommand = args[2].toLowerCase();
-                switch (subCommand) {
-                    case "info":
-                        sendUserInfo(sender, user);
-                        break;
-                    case "data":
-                        handleUserData(sender, args, user, null);
-                        break;
-                    case "profile":
-                        handleUserProfile(sender, args, user, null);
-                        break;
-                    default:
-                        sender.sendMessage("§cUngültiger Parameter. Benutze 'info', 'data' oder 'profile'.");
-                        break;
-                }
-                return;
+                return new UserWrapper(user, null);
             }
         }
 
+        if (onlineOnly) {
+            return null;
+        }
+
         OfflinePlayer offlinePlayer = findOfflinePlayer(playerName);
-        if (offlinePlayer == null) {
-            sender.sendMessage("§cSpieler " + playerName + " nicht gefunden.");
-            return;
+        if (offlinePlayer != null) {
+            OfflineUser offlineUser = OfflineUserBase.getOfflineUser(offlinePlayer);
+            if (offlineUser == null) {
+                offlineUser = new OfflineUser(offlinePlayer);
+                OfflineUserBase.addOfflineUser(offlineUser);
+            }
+            return new UserWrapper(null, offlineUser);
         }
 
-        OfflineUser offlineUser = OfflineUserBase.getOfflineUser(offlinePlayer);
-        if (offlineUser == null) {
-            offlineUser = new OfflineUser(offlinePlayer);
-            OfflineUserBase.addOfflineUser(offlineUser);
-        }
-
-        String subCommand = args[2].toLowerCase();
-        switch (subCommand) {
-            case "info":
-                sendOfflineUserInfo(sender, offlineUser);
-                break;
-            case "data":
-                handleUserData(sender, args, null, offlineUser);
-                break;
-            case "profile":
-                handleUserProfile(sender, args, null, offlineUser);
-                break;
-            default:
-                sender.sendMessage("§cUngültiger Parameter. Benutze 'info', 'data' oder 'profile'.");
-                break;
-        }
+        return null;
     }
 
-    private void handleUserData(CommandSender sender, String[] args, User onlineUser, OfflineUser offlineUser) {
+    private void handleUserData(CommandSender sender, String[] args, UserWrapper userWrapper) {
         if (args.length < 4) {
-            sender.sendMessage("§cBenutzung: /user <online/all> <spielername> data <logins/...>");
+            sender.sendMessage(ERROR_PREFIX + "Benutzung: /user " + args[0] + " <spielername> data <logins/...>");
             return;
         }
 
         String dataType = args[3].toLowerCase();
-        switch (dataType) {
-            case "logins":
-                handleLoginData(sender, args, onlineUser, offlineUser);
-                break;
-            default:
-                sender.sendMessage("§cUnbekannter Datentyp: " + dataType);
-                break;
+        if ("logins".equals(dataType)) {
+            handleLoginData(sender, args, userWrapper);
+        } else {
+            sender.sendMessage(ERROR_PREFIX + "Unbekannter Datentyp: " + dataType);
         }
     }
 
-    private void handleUserProfile(CommandSender sender, String[] args, User onlineUser, OfflineUser offlineUser) {
+    private void handleUserProfile(CommandSender sender, String[] args, UserWrapper userWrapper) {
         if (args.length < 4) {
-            sender.sendMessage("§cBenutzung: /user <online/all> <spielername> profile <get/set>");
+            sender.sendMessage(ERROR_PREFIX + "Benutzung: /user " + args[0] + " <spielername> profile <get/set>");
             return;
         }
 
@@ -169,179 +123,168 @@ public class UserCommand implements CommandExecutor, TabCompleter {
         switch (action) {
             case "get":
                 if (args.length < 5) {
-                    sender.sendMessage("§cBenutzung: /user <online/all> <spielername> profile get <name/playtime/mode/line>");
+                    sender.sendMessage(ERROR_PREFIX + "Benutzung: /user " + args[0] + " <spielername> profile get <name/playtime/mode/line>");
                     return;
                 }
-                getProfileSetting(sender, args[4], onlineUser, offlineUser);
+                getProfileSetting(sender, args[4], userWrapper);
                 break;
             case "set":
                 if (args.length < 6) {
-                    sender.sendMessage("§cBenutzung: /user <online/all> <spielername> profile set <name/playtime/mode/line> <wert>");
+                    sender.sendMessage(ERROR_PREFIX + "Benutzung: /user " + args[0] + " <spielername> profile set <name/playtime/mode/line> <wert>");
                     return;
                 }
-                setProfileSetting(sender, args[4], args[5], onlineUser, offlineUser);
+                setProfileSetting(sender, args[4], args[5], userWrapper, args);
                 break;
             default:
-                sender.sendMessage("§cUngültiger Parameter. Benutze 'get' oder 'set'.");
+                sender.sendMessage(ERROR_PREFIX + "Ungültiger Parameter. Benutze 'get' oder 'set'.");
                 break;
         }
     }
 
-    private void getProfileSetting(CommandSender sender, String setting, User onlineUser, OfflineUser offlineUser) {
-        String playerName;
+    private void getProfileSetting(CommandSender sender, String setting, UserWrapper userWrapper) {
+        String playerName = userWrapper.getName();
         String settingValue = "Nicht verfügbar";
 
-        if (onlineUser != null) {
-            playerName = onlineUser.getPlayer().getName();
-            switch (setting.toLowerCase()) {
-                case "name":
-                    settingValue = onlineUser.getPlayer().getName();
-                    break;
-                case "playtime":
-                    int minutes = onlineUser.getPlayer().getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / 20 / 60;
-                    settingValue = formatPlaytime(minutes);
-                    break;
-                case "mode":
-                    settingValue = onlineUser.getMode().toString();
-                    break;
-                case "line":
-                    if (onlineUser.getNameTag() != null && !onlineUser.getNameTag().getLines().isEmpty()) {
-                        StringBuilder sb = new StringBuilder();
-                        HashMap<Integer, HashMap<String, Object>> lines = onlineUser.getNameTag().getLines();
-                        for (int i = 0; i < lines.size(); i++) {
-                            HashMap<String, Object> line = lines.get(i);
-                            sb.append(i + 1).append(": ").append(line.get("text")).append(", ");
-                        }
-                        settingValue = sb.toString().replaceAll(", $", "");
+        switch (setting.toLowerCase()) {
+            case "nickname":
+                settingValue = userWrapper.getNickname();
+                break;
+            case "playtime":
+                settingValue = formatPlaytime(userWrapper.getPlaytime());
+                break;
+            case "mode":
+                settingValue = userWrapper.getMode().toString();
+                break;
+            case "line":
+                if (userWrapper.isOnline() && userWrapper.getOnlineUser().getNameTag() != null) {
+                    HashMap<Integer, HashMap<String, Object>> lines = userWrapper.getOnlineUser().getNameTag().getLines();
+                    StringBuilder sb = new StringBuilder();
+
+                    sb.append("Aktuelle Zeilen:\n");
+                    for (int i = 0; i < lines.size(); i++) {
+                        HashMap<String, Object> line = lines.get(i);
+                        sb.append(i + 1).append(": ").append(line.get("text")).append("\n");
                     }
-                    break;
-                default:
-                    sender.sendMessage("§cUnbekannte Profileinstellung: " + setting);
-                    return;
-            }
-        } else if (offlineUser != null) {
-            playerName = offlineUser.getOfflinePlayer().getName() != null ?
-                    offlineUser.getOfflinePlayer().getName() : offlineUser.getOfflinePlayer().getUniqueId().toString();
-            switch (setting.toLowerCase()) {
-                case "name":
-                    settingValue = playerName;
-                    break;
-                case "playtime":
-                    if (offlineUser.getOfflinePlayer().hasPlayedBefore()) {
-                        int minutes = offlineUser.getOfflinePlayer().getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / 20 / 60;
-                        settingValue = formatPlaytime(minutes);
-                    }
-                    break;
-                case "mode":
-                    settingValue = offlineUser.getMode().toString();
-                    break;
-                default:
-                    sender.sendMessage("§cUnbekannte Profileinstellung: " + setting);
-                    return;
-            }
-        } else {
-            sender.sendMessage("§cKein Benutzer gefunden.");
-            return;
+                    settingValue = sb.toString();
+                } else {
+                    settingValue = "Keine Zeilen vorhanden.";
+                }
+                break;
         }
 
-        sender.sendMessage("§6Profileinstellung für " + playerName + ":");
-        sender.sendMessage("§e" + setting + ": §f" + settingValue);
+        sender.sendMessage(HEADER_PREFIX + "Profileinstellung für " + playerName + ":");
+        sender.sendMessage(INFO_PREFIX + setting + ": §f" + settingValue);
     }
 
-    private void setProfileSetting(CommandSender sender, String setting, String value, User onlineUser, OfflineUser offlineUser) {
-        String playerName;
+    private void setProfileSetting(CommandSender sender, String setting, String value, UserWrapper userWrapper, String[] args) {
+        String playerName = userWrapper.getName();
         boolean success = false;
 
-        if (onlineUser != null) {
-            playerName = onlineUser.getPlayer().getName();
+        try {
             switch (setting.toLowerCase()) {
                 case "name":
-                    onlineUser.getPlayer().setDisplayName(value);
+                    if (userWrapper.isOnline()) {
+                        userWrapper.getOnlineUser().getPlayer().setDisplayName(value);
+                        success = true;
+                    } else {
+                        sender.sendMessage(ERROR_PREFIX + "Diese Einstellung kann nicht für Offline-Spieler geändert werden.");
+                        return;
+                    }
+                    break;
+                case "nickname":
+                    if (userWrapper.isOnline()) {
+                        userWrapper.getOnlineUser().setNickname(value);
+                    } else {
+                        userWrapper.getOfflineUser().setNickname(value);
+                    }
                     success = true;
                     break;
                 case "playtime":
-                    try {
-                        int minutes = parseInt(value);
+                    if (userWrapper.isOnline()) {
+                        int minutes = Integer.parseInt(value);
                         int ticks = minutes * 20 * 60;
-                        onlineUser.getPlayer().setStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE, ticks);
+                        userWrapper.getOnlineUser().getPlayer().setStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE, ticks);
                         success = true;
-                    } catch (NumberFormatException e) {
-                        sender.sendMessage("§cUngültiger Wert für Spielzeit: " + value);
+                    } else {
+                        sender.sendMessage(ERROR_PREFIX + "Diese Einstellung kann nicht für Offline-Spieler geändert werden.");
                         return;
                     }
                     break;
                 case "mode":
-                    try {
-                        TonyMode mode = TonyMode.fromString(value);
-                        onlineUser.setMode(mode);
-                        success = true;
-                    } catch (IllegalArgumentException e) {
-                        sender.sendMessage("§cUngültiger Modus: " + value);
-                        return;
+                    TonyMode mode = TonyMode.fromString(value);
+                    if (userWrapper.isOnline()) {
+                        userWrapper.getOnlineUser().setMode(mode);
+                    } else {
+                        userWrapper.getOfflineUser().setMode(mode);
                     }
+                    success = true;
                     break;
                 case "line":
-                    try {
-                        String[] parts = value.split(" ", 2);
-                        int lineNumber = parseInt(parts[0]) - 1;
-                        String lineText = parts.length > 1 ? parts[1] : "";
-
-                        HashMap<Integer, HashMap<String, Object>> lines = onlineUser.getNameTag().getLines();
-                        List<String> linesList = new ArrayList<>();
-
-                        for (int i = 0; i < Math.max(lines.size(), lineNumber + 1); i++) {
-                            if (i == lineNumber) {
-                                linesList.add(lineText);
-                            } else if (i < lines.size()) {
-                                HashMap<String, Object> line = lines.get(i);
-                                linesList.add((String) line.get("text"));
-                            } else {
-                                linesList.add("");
-                            }
+                    if (userWrapper.isOnline()) {
+                        if (args.length < 7) {
+                            sender.sendMessage(ERROR_PREFIX + "Benutzung: /user " + args[0] + " <spielername> profile set line <position/under/over> <text>");
+                            return;
                         }
 
-                        onlineUser.setNameTags(linesList);
-                        success = true;
-                    } catch (Exception e) {
-                        sender.sendMessage("§cUngültiges Format für Line. Benutze: <linenumber> <text>");
-                        return;
-                    }
-                    break;
-                default:
-                    sender.sendMessage("§cUnbekannte Profileinstellung: " + setting);
-                    return;
-            }
-            if (success) {
-                onlineUser.save();
-            }
-        } else if (offlineUser != null) {
-            playerName = offlineUser.getOfflinePlayer().getName() != null ?
-                    offlineUser.getOfflinePlayer().getName() : offlineUser.getOfflinePlayer().getUniqueId().toString();
-            switch (setting.toLowerCase()) {
-                case "mode":
-                    try {
-                        TonyMode mode = TonyMode.fromString(value);
-                        offlineUser.setMode(mode);
-                        success = true;
-                    } catch (IllegalArgumentException e) {
-                        sender.sendMessage("§cUngültiger Modus: " + value);
-                        return;
-                    }
-                    break;
-                default:
-                    sender.sendMessage("§cDiese Einstellung kann nicht für Offline-Spieler geändert werden.");
-                    return;
-            }
-            if (success) {
-                offlineUser.save();
-            }
-        } else {
-            sender.sendMessage("§cKein Benutzer gefunden.");
-            return;
-        }
+                        String positionArg = args[5].toLowerCase();
+                        String lineText = String.join(" ", Arrays.copyOfRange(args, 5, args.length));
 
-        if (success) {
-            sender.sendMessage("§aProfileinstellung " + setting + " für " + playerName + " wurde auf '" + value + "' gesetzt.");
+                        HashMap<Integer, HashMap<String, Object>> lines = userWrapper.getOnlineUser().getNameTag().getLines();
+                        List<String> linesList = new ArrayList<>();
+
+                        for (int i = 0; i < lines.size(); i++) {
+                            HashMap<String, Object> line = lines.get(i);
+                            linesList.add((String) line.get("text"));
+                        }
+
+                        switch (positionArg) {
+                            case "under":
+                                if (linesList.isEmpty()) {
+                                    linesList.add(lineText);
+                                } else {
+                                    linesList.add(lineText);
+                                }
+                                break;
+                            case "over":
+                                if (linesList.isEmpty()) {
+                                    linesList.add(lineText);
+                                } else {
+                                    linesList.add(0, lineText);
+                                }
+                                break;
+                            default:
+                                try {
+                                    int lineNumber = Integer.parseInt(positionArg) - 1;
+                                    if (lineNumber < 0 || lineNumber >= linesList.size()) {
+                                        sender.sendMessage(ERROR_PREFIX + "Ungültige Position: " + (lineNumber + 1));
+                                        return;
+                                    }
+                                    linesList.set(lineNumber, lineText);
+                                } catch (NumberFormatException e) {
+                                    sender.sendMessage(ERROR_PREFIX + "Ungültige Position: " + positionArg);
+                                    return;
+                                }
+                                break;
+                        }
+                        userWrapper.getOnlineUser().setNameTags(linesList);
+                        success = true;
+                    } else {
+                        sender.sendMessage(ERROR_PREFIX + "Diese Einstellung kann nicht für Offline-Spieler geändert werden.");
+                        return;
+                    }
+                    break;
+            }
+
+            if (success) {
+                userWrapper.save();
+                sender.sendMessage("§aProfileinstellung " + setting + " für " + playerName + " wurde auf '" + value + "' gesetzt.");
+            }
+        } catch (NumberFormatException e) {
+            sender.sendMessage(ERROR_PREFIX + "Ungültiger Zahlenwert: " + value);
+        } catch (IllegalArgumentException e) {
+            sender.sendMessage(ERROR_PREFIX + "Ungültiger Wert: " + value);
+        } catch (Exception e) {
+            sender.sendMessage(ERROR_PREFIX + "Fehler beim Setzen der Einstellung: " + e.getMessage());
         }
     }
 
@@ -360,25 +303,18 @@ public class UserCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void handleLoginData(CommandSender sender, String[] args, User onlineUser, OfflineUser offlineUser) {
+    private void handleLoginData(CommandSender sender, String[] args, UserWrapper userWrapper) {
         if (args.length < 5) {
-            sender.sendMessage("§cBenutzung: /user <online/all> <spielername> data logins <last/first/all/timeKey>");
+            sender.sendMessage(ERROR_PREFIX + "Benutzung: /user " + args[0] + " <spielername> data logins <last/first/all/timeKey>");
             return;
         }
 
         String loginOption = args[4].toLowerCase();
-        Map<String, User.PlayerLoginInfo> loginHistory;
-        String userName;
+        Map<String, User.PlayerLoginInfo> loginHistory = userWrapper.getLoginHistory();
+        String userName = userWrapper.getName();
 
-        if (onlineUser != null) {
-            loginHistory = onlineUser.getLoginHistory();
-            userName = onlineUser.getPlayer().getName();
-        } else if (offlineUser != null) {
-            loginHistory = offlineUser.getLoginHistory();
-            userName = offlineUser.getOfflinePlayer().getName() != null ?
-                    offlineUser.getOfflinePlayer().getName() : offlineUser.getOfflinePlayer().getUniqueId().toString();
-        } else {
-            sender.sendMessage("§cKein Benutzer gefunden.");
+        if (loginHistory.isEmpty()) {
+            sender.sendMessage(INFO_PREFIX + "Keine Login-Informationen für " + userName + " gefunden.");
             return;
         }
 
@@ -397,132 +333,103 @@ public class UserCommand implements CommandExecutor, TabCompleter {
                 if (loginHistory.containsKey(loginOption)) {
                     showLoginDetail(sender, loginOption, loginHistory.get(loginOption), userName);
                 } else {
-                    sender.sendMessage("§cLogin-Zeitstempel " + loginOption + " nicht gefunden.");
+                    sender.sendMessage(ERROR_PREFIX + "Login-Zeitstempel " + loginOption + " nicht gefunden.");
                 }
                 break;
         }
     }
 
     private void showLastLogin(CommandSender sender, Map<String, User.PlayerLoginInfo> loginHistory, String userName) {
-        if (loginHistory.isEmpty()) {
-            sender.sendMessage("§eKeine Login-Informationen für " + userName + " gefunden.");
-            return;
-        }
-
-        LocalDateTime latestTime = LocalDateTime.MIN;
-        String latestKey = null;
-        User.PlayerLoginInfo latestInfo = null;
-
-        for (Map.Entry<String, User.PlayerLoginInfo> entry : loginHistory.entrySet()) {
-            User.PlayerLoginInfo info = entry.getValue();
-            if (info.getTimestamp().isAfter(latestTime)) {
-                latestTime = info.getTimestamp();
-                latestKey = entry.getKey();
-                latestInfo = info;
-            }
-        }
-
-        if (latestInfo != null) {
-            showLoginDetail(sender, latestKey, latestInfo, userName);
+        Map.Entry<String, User.PlayerLoginInfo> latest = findLoginByTime(loginHistory, true);
+        if (latest != null) {
+            showLoginDetail(sender, latest.getKey(), latest.getValue(), userName);
         }
     }
 
     private void showFirstLogin(CommandSender sender, Map<String, User.PlayerLoginInfo> loginHistory, String userName) {
-        if (loginHistory.isEmpty()) {
-            sender.sendMessage("§eKeine Login-Informationen für " + userName + " gefunden.");
-            return;
+        Map.Entry<String, User.PlayerLoginInfo> earliest = findLoginByTime(loginHistory, false);
+        if (earliest != null) {
+            showLoginDetail(sender, earliest.getKey(), earliest.getValue(), userName);
         }
+    }
 
-        LocalDateTime earliestTime = LocalDateTime.MAX;
-        String earliestKey = null;
-        User.PlayerLoginInfo earliestInfo = null;
+    private Map.Entry<String, User.PlayerLoginInfo> findLoginByTime(Map<String, User.PlayerLoginInfo> loginHistory, boolean latest) {
+        LocalDateTime targetTime = latest ? LocalDateTime.MIN : LocalDateTime.MAX;
+        String targetKey = null;
+        User.PlayerLoginInfo targetInfo = null;
 
         for (Map.Entry<String, User.PlayerLoginInfo> entry : loginHistory.entrySet()) {
             User.PlayerLoginInfo info = entry.getValue();
-            if (info.getTimestamp().isBefore(earliestTime)) {
-                earliestTime = info.getTimestamp();
-                earliestKey = entry.getKey();
-                earliestInfo = info;
+            if ((latest && info.getTimestamp().isAfter(targetTime)) ||
+                    (!latest && info.getTimestamp().isBefore(targetTime))) {
+                targetTime = info.getTimestamp();
+                targetKey = entry.getKey();
+                targetInfo = info;
             }
         }
 
-        if (earliestInfo != null) {
-            showLoginDetail(sender, earliestKey, earliestInfo, userName);
-        }
+        return targetKey != null ? Map.entry(targetKey, targetInfo) : null;
     }
 
     private void showAllLogins(CommandSender sender, Map<String, User.PlayerLoginInfo> loginHistory, String userName) {
-        if (loginHistory.isEmpty()) {
-            sender.sendMessage("§eKeine Login-Informationen für " + userName + " gefunden.");
-            return;
-        }
+        sender.sendMessage(HEADER_PREFIX + "=== Login-Historie für " + userName + " ===");
 
-        sender.sendMessage("§6=== Login-Historie für " + userName + " ===");
-
-        List<Map.Entry<String, User.PlayerLoginInfo>> sortedLogins = new ArrayList<>(loginHistory.entrySet());
-        sortedLogins.sort((e1, e2) -> e2.getValue().getTimestamp().compareTo(e1.getValue().getTimestamp()));
-
-        for (Map.Entry<String, User.PlayerLoginInfo> entry : sortedLogins) {
-            String timeKey = entry.getKey();
-            User.PlayerLoginInfo info = entry.getValue();
-            sender.sendMessage("§e" + timeKey + "§8 - " +
-                    "§f" + info.getTimestamp().format(DATE_FORMAT) +
-                    "§8 - §f" + info.getIp());
-        }
+        loginHistory.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().getTimestamp().compareTo(e1.getValue().getTimestamp()))
+                .forEach(entry -> sender.sendMessage(
+                        INFO_PREFIX + entry.getKey() + "§8 - " +
+                                "§f" + entry.getValue().getTimestamp().format(DATE_FORMAT) +
+                                "§8 - §f" + entry.getValue().getIp()));
     }
 
     private void showLoginDetail(CommandSender sender, String timeKey, User.PlayerLoginInfo info, String userName) {
-        sender.sendMessage("§6=== Login-Details für " + userName + " (" + timeKey + ") ===");
-        sender.sendMessage("§eZeit: §f" + info.getTimestamp().format(DATE_FORMAT));
-        sender.sendMessage("§eIP: §f" + info.getIp());
-        sender.sendMessage("§eStandort: §f" + info.getLocation());
-        sender.sendMessage("§eISP: §f" + info.getIsp());
-        sender.sendMessage("§eBetriebssystem: §f" + info.getOperatingSystem());
-        sender.sendMessage("§eClient: §f" + info.getClientVersion());
+        sender.sendMessage(HEADER_PREFIX + "=== Login-Details für " + userName + " (" + timeKey + ") ===");
+        sender.sendMessage(INFO_PREFIX + "Zeit: §f" + info.getTimestamp().format(DATE_FORMAT));
+        sender.sendMessage(INFO_PREFIX + "IP: §f" + info.getIp());
+        sender.sendMessage(INFO_PREFIX + "Standort: §f" + info.getLocation());
+        sender.sendMessage(INFO_PREFIX + "ISP: §f" + info.getIsp());
+        sender.sendMessage(INFO_PREFIX + "Betriebssystem: §f" + info.getOperatingSystem());
+        sender.sendMessage(INFO_PREFIX + "Client: §f" + info.getClientVersion());
     }
 
-    private void sendUserInfo(CommandSender sender, User user) {
-        sender.sendMessage("§6=== Benutzerinfo für " + user.getPlayer().getName() + " ===");
-        sender.sendMessage("§eUUID: §f" + user.getPlayer().getUniqueId());
-        sender.sendMessage("§eModus: §f" + user.getMode());
-        sender.sendMessage("§eErster Join: §f" +
-                (user.getFirstJoin() != null ? user.getFirstJoin().format(DATE_FORMAT) : "Unbekannt"));
-        sender.sendMessage("§eLetzter Join: §f" +
-                (user.getLastJoin() != null ? user.getLastJoin().format(DATE_FORMAT) : "Unbekannt"));
-        sender.sendMessage("§eLetzter Standort: §f" + user.getLastKnownLocation());
-        sender.sendMessage("§eISP: §f" + user.getLastISP());
-        sender.sendMessage("§eBetriebssystem: §f" + user.getOperatingSystem());
-        sender.sendMessage("§eClient: §f" + user.getClientVersion());
-        sender.sendMessage("§ePing: §f" + user.getPing() + "ms");
-
-        if (sender instanceof Player && ((Player) sender).getUniqueId().equals(user.getPlayer().getUniqueId())) {
-            sender.sendMessage("§aDies ist dein aktueller User!");
+    private List<String> getLineCompletions(UserWrapper userWrapper) {
+        List<String> completions = new ArrayList<>();
+        if (userWrapper.isOnline() && userWrapper.getOnlineUser().getNameTag() != null) {
+            HashMap<Integer, HashMap<String, Object>> lines = userWrapper.getOnlineUser().getNameTag().getLines();
+            for (int i = 0; i < lines.size(); i++) {
+                HashMap<String, Object> line = lines.get(i);
+                completions.add((i + 1) + " " + line.get("text"));
+            }
         }
+        return completions;
     }
 
-    private void sendOfflineUserInfo(CommandSender sender, OfflineUser user) {
-        String playerName = user.getOfflinePlayer().getName() != null ?
-                user.getOfflinePlayer().getName() : user.getOfflinePlayer().getUniqueId().toString();
+    private void sendUserInfo(CommandSender sender, UserWrapper userWrapper) {
+        sender.sendMessage(HEADER_PREFIX + "=== " +
+                (userWrapper.isOnline() ? "" : "Offline-") + "Benutzerinfo für " + userWrapper.getName() + " ===");
 
-        sender.sendMessage("§6=== Offline-Benutzerinfo für " + playerName + " ===");
-        sender.sendMessage("§eUUID: §f" + user.getOfflinePlayer().getUniqueId());
-        sender.sendMessage("§eModus: §f" + user.getMode());
-        sender.sendMessage("§eErster Join: §f" +
-                (user.getFirstJoin() != null ? user.getFirstJoin().format(DATE_FORMAT) : "Unbekannt"));
-        sender.sendMessage("§eLetzter Join: §f" +
-                (user.getLastJoin() != null ? user.getLastJoin().format(DATE_FORMAT) : "Unbekannt"));
-        sender.sendMessage("§eLetzter Standort: §f" + user.getLastKnownLocation());
-        sender.sendMessage("§eISP: §f" + user.getLastISP());
-        sender.sendMessage("§eBetriebssystem: §f" + user.getOperatingSystem());
-        sender.sendMessage("§eClient: §f" + user.getClientVersion());
+        sender.sendMessage(INFO_PREFIX + "UUID: §f" + userWrapper.getUUID());
+        sender.sendMessage(INFO_PREFIX + "Modus: §f" + userWrapper.getMode());
+        sender.sendMessage(INFO_PREFIX + "Erster Join: §f" +
+                (userWrapper.getFirstJoin() != null ? userWrapper.getFirstJoin().format(DATE_FORMAT) : "Unbekannt"));
+        sender.sendMessage(INFO_PREFIX + "Letzter Join: §f" +
+                (userWrapper.getLastJoin() != null ? userWrapper.getLastJoin().format(DATE_FORMAT) : "Unbekannt"));
+        sender.sendMessage(INFO_PREFIX + "Letzter Standort: §f" + userWrapper.getLastKnownLocation());
+        sender.sendMessage(INFO_PREFIX + "ISP: §f" + userWrapper.getLastISP());
+        sender.sendMessage(INFO_PREFIX + "Betriebssystem: §f" + userWrapper.getOperatingSystem());
+        sender.sendMessage(INFO_PREFIX + "Client: §f" + userWrapper.getClientVersion());
 
-        if (user.isOnline()) {
+        if (userWrapper.isOnline()) {
+            sender.sendMessage(INFO_PREFIX + "Ping: §f" + userWrapper.getOnlineUser().getPing() + "ms");
+        }
+
+        if (userWrapper.isOnline()) {
             sender.sendMessage("§aSpieler ist derzeit online.");
         } else {
             sender.sendMessage("§cSpieler ist derzeit offline.");
         }
 
-        if (sender instanceof Player && ((Player) sender).getUniqueId().equals(user.getOfflinePlayer().getUniqueId())) {
+        if (sender instanceof Player && ((Player) sender).getUniqueId().equals(userWrapper.getUUID())) {
             sender.sendMessage("§aDies ist dein aktueller User!");
         }
     }
@@ -551,129 +458,252 @@ public class UserCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage("§6=== User Command Hilfe ===");
-        sender.sendMessage("§e/user online <spielername> info §8- Zeigt Informationen über einen Online-Spieler");
-        sender.sendMessage("§e/user online <spielername> data logins [last/first/all/timeKey] §8- Zeigt Login-Daten eines Online-Spielers");
-        sender.sendMessage("§e/user online <spielername> profile [get/set] [name/playtime/mode/line] §8- Verwaltet Profileinstellungen");
-        sender.sendMessage("§e/user all <spielername> info §8- Zeigt Informationen über einen Spieler (online oder offline)");
-        sender.sendMessage("§e/user all <spielername> data logins [last/first/all/timeKey] §8- Zeigt Login-Daten eines Spielers");
-        sender.sendMessage("§e/user all <spielername> profile [get/set] [name/playtime/mode/line] §8- Verwaltet Profileinstellungen");
+        sender.sendMessage(HEADER_PREFIX + "=== User Command Hilfe ===");
+        sender.sendMessage(INFO_PREFIX + "/user online <spielername> info §8- Zeigt Informationen über einen Online-Spieler");
+        sender.sendMessage(INFO_PREFIX + "/user online <spielername> data logins [last/first/all/timeKey] §8- Zeigt Login-Daten eines Online-Spielers");
+        sender.sendMessage(INFO_PREFIX + "/user online <spielername> profile [get/set] [name/playtime/mode/line] [wert] §8- Verwaltet Profileinstellungen");
+        sender.sendMessage(INFO_PREFIX + "/user all <spielername> info §8- Zeigt Informationen über einen Spieler (online oder offline)");
+        sender.sendMessage(INFO_PREFIX + "/user all <spielername> data logins [last/first/all/timeKey] §8- Zeigt Login-Daten eines Spielers");
+        sender.sendMessage(INFO_PREFIX + "/user all <spielername> profile [get/set] [name/playtime/mode/line] [wert] §8- Verwaltet Profileinstellungen");
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
-        List<String> completions = new ArrayList<>();
-
         if (args.length == 1) {
             return getPartialMatches(args[0], Arrays.asList("online", "all"));
         } else if (args.length == 2) {
-            List<String> playerNames = new ArrayList<>();
-            if (args[0].equalsIgnoreCase("online")) {
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    playerNames.add(player.getName());
-                }
-            } else if (args[0].equalsIgnoreCase("all")) {
-                for (OfflinePlayer player : Bukkit.getOfflinePlayers()) {
-                    if (player.getName() != null) {
-                        playerNames.add(player.getName());
-                    }
-                }
-                for (Player player : Bukkit.getOnlinePlayers()) {
-                    playerNames.add(player.getName());
-                }
-            }
-            return getPartialMatches(args[1], playerNames);
+            return getPlayerNameCompletions(args);
         } else if (args.length == 3) {
             return getPartialMatches(args[2], Arrays.asList("info", "data", "profile"));
         } else if (args.length == 4) {
-            if (args[2].equalsIgnoreCase("data")) {
-                return getPartialMatches(args[3], Arrays.asList("logins"));
-            } else if (args[2].equalsIgnoreCase("profile")) {
-                return getPartialMatches(args[3], Arrays.asList("get", "set"));
-            }
+            return getSubcommandCompletions(args);
         } else if (args.length == 5) {
-            if (args[2].equalsIgnoreCase("data") && args[3].equalsIgnoreCase("logins")) {
-                List<String> options = new ArrayList<>(Arrays.asList("last", "first", "all"));
-
-                if (args[0].equalsIgnoreCase("online") || args[0].equalsIgnoreCase("all")) {
-                    Player player = Bukkit.getPlayer(args[1]);
-                    if (player != null) {
-                        User user = UserBase.getUser(player);
-                        if (user != null) {
-                            options.addAll(user.getLoginHistory().keySet());
-                        }
-                    }
-                }
-
-                if (args[0].equalsIgnoreCase("all")) {
-                    OfflinePlayer offlinePlayer = findOfflinePlayer(args[1]);
-                    if (offlinePlayer != null) {
-                        OfflineUser offlineUser = OfflineUserBase.getOfflineUser(offlinePlayer);
-                        if (offlineUser == null) {
-                            offlineUser = new OfflineUser(offlinePlayer);
-                        }
-                        options.addAll(offlineUser.getLoginHistory().keySet());
-                    }
-                }
-
-                return getPartialMatches(args[4], options);
-            } else if (args[2].equalsIgnoreCase("profile")) {
-                if (args[3].equalsIgnoreCase("get") || args[3].equalsIgnoreCase("set")) {
-                    return getPartialMatches(args[4], Arrays.asList("name", "playtime", "mode", "line"));
-                }
-            }
+            return getDetailedOptionCompletions(args);
         } else if (args.length == 6) {
-            if (args[2].equalsIgnoreCase("profile") && args[3].equalsIgnoreCase("set")) {
-                Player targetPlayer = Bukkit.getPlayer(args[1]);
-                if (targetPlayer != null) {
-                    User user = UserBase.getUser(targetPlayer);
-                    if (user != null) {
-                        switch (args[4].toLowerCase()) {
-                            case "name":
-                                return Arrays.asList(targetPlayer.getDisplayName());
-                            case "playtime":
-                                int minutes = targetPlayer.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / 20 / 60;
-                                return Arrays.asList(String.valueOf(minutes));
-                            case "mode":
-                                return Arrays.asList(user.getMode().toString());
-                            case "line":
-                                List<String> lineOptions = new ArrayList<>();
-                                HashMap<Integer, HashMap<String, Object>> lines = user.getNameTag().getLines();
-                                for (int i = 0; i < lines.size(); i++) {
-                                    HashMap<String, Object> line = lines.get(i);
-                                    lineOptions.add((i+1) + " " + line.get("text"));
-                                }
-                                lineOptions.add((lines.size()+1) + " ");
-                                return getPartialMatches(args[5], lineOptions);
-                        }
-                    }
-                } else {
-                    OfflinePlayer offlinePlayer = findOfflinePlayer(args[1]);
-                    if (offlinePlayer != null) {
-                        OfflineUser offlineUser = OfflineUserBase.getOfflineUser(offlinePlayer);
-                        if (offlineUser != null) {
-                            if (args[4].equalsIgnoreCase("mode")) {
-                                return Arrays.asList(offlineUser.getMode().toString());
-                            }
-                        }
-                    }
-                }
+            return getSettingValueCompletions(args);
+        }
 
-                // Fallback options if specific user values aren't available
-                if (args[4].equalsIgnoreCase("mode")) {
-                    return Arrays.stream(TonyMode.values())
-                            .map(TonyMode::toString)
-                            .collect(Collectors.toList());
+        return new ArrayList<>();
+    }
+
+    private List<String> getPlayerNameCompletions(String[] args) {
+        List<String> playerNames = new ArrayList<>();
+
+        if (args[0].equalsIgnoreCase("online")) {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                playerNames.add(player.getName());
+            }
+        } else if (args[0].equalsIgnoreCase("all")) {
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                playerNames.add(player.getName());
+            }
+
+            for (OfflinePlayer player : Bukkit.getOfflinePlayers()) {
+                if (player.getName() != null) {
+                    playerNames.add(player.getName());
                 }
             }
         }
 
-        return completions;
+        return getPartialMatches(args[1], playerNames);
+    }
+
+    private List<String> getSubcommandCompletions(String[] args) {
+        if (args[2].equalsIgnoreCase("data")) {
+            return getPartialMatches(args[3], Collections.singletonList("logins"));
+        } else if (args[2].equalsIgnoreCase("profile")) {
+            return getPartialMatches(args[3], Arrays.asList("get", "set"));
+        }
+        return new ArrayList<>();
+    }
+
+    private List<String> getDetailedOptionCompletions(String[] args) {
+        if (args[2].equalsIgnoreCase("data") && args[3].equalsIgnoreCase("logins")) {
+            List<String> options = new ArrayList<>(Arrays.asList("last", "first", "all"));
+
+            UserWrapper userWrapper = findUser(args[1], false);
+            if (userWrapper != null) {
+                options.addAll(userWrapper.getLoginHistory().keySet());
+            }
+
+            return getPartialMatches(args[4], options);
+        } else if (args[2].equalsIgnoreCase("profile")) {
+            if (args[3].equalsIgnoreCase("get") || args[3].equalsIgnoreCase("set")) {
+                return getPartialMatches(args[4], Arrays.asList("nickname", "playtime", "mode", "line"));
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    private List<String> getSettingValueCompletions(String[] args) {
+        if (args[2].equalsIgnoreCase("profile") && args[3].equalsIgnoreCase("set")) {
+            UserWrapper userWrapper = findUser(args[1], false);
+            if (userWrapper != null) {
+                switch (args[4].toLowerCase()) {
+                    case "name":
+                        return Collections.singletonList(userWrapper.getName());
+                    case "playtime":
+                        return Collections.singletonList(String.valueOf(userWrapper.getPlaytime()));
+                    case "mode":
+                        return Collections.singletonList(userWrapper.getMode().toString());
+                    case "line":
+                        if (userWrapper.isOnline()) {
+                            List<String> completions = new ArrayList<>();
+                            completions.add("under");
+                            completions.add("over");
+                            HashMap<Integer, HashMap<String, Object>> lines = userWrapper.getOnlineUser().getNameTag().getLines();
+                            for (int i = 0; i < lines.size(); i++) {
+                                HashMap<String, Object> line = lines.get(i);
+                                completions.add((i + 1) + " " + line.get("text"));
+                            }
+
+                            return getPartialMatches(args[5], completions);
+                        }
+                        break;
+                }
+            }
+
+            if (args[4].equalsIgnoreCase("mode")) {
+                return Arrays.stream(TonyMode.values())
+                        .map(TonyMode::toString)
+                        .collect(Collectors.toList());
+            }
+        }
+        return new ArrayList<>();
     }
 
     private List<String> getPartialMatches(String token, List<String> options) {
         return options.stream()
                 .filter(option -> option.toLowerCase().startsWith(token.toLowerCase()))
                 .collect(Collectors.toList());
+    }
+
+    private static class UserWrapper {
+        private final User onlineUser;
+        private final OfflineUser offlineUser;
+
+        public UserWrapper(User onlineUser, OfflineUser offlineUser) {
+            this.onlineUser = onlineUser;
+            this.offlineUser = offlineUser;
+        }
+
+        public boolean isOnline() {
+            return onlineUser != null;
+        }
+
+        public User getOnlineUser() {
+            return onlineUser;
+        }
+
+        public OfflineUser getOfflineUser() {
+            return offlineUser;
+        }
+
+        public String getNickname() {
+            if (isOnline()) {
+                return onlineUser.getNickname();
+            } else {
+                return offlineUser.getNickname();
+            }
+        }
+
+        public String getName() {
+            if (isOnline()) {
+                return onlineUser.getPlayer().getName();
+            } else {
+                return offlineUser.getOfflinePlayer().getName() != null ?
+                        offlineUser.getOfflinePlayer().getName() :
+                        offlineUser.getOfflinePlayer().getUniqueId().toString();
+            }
+        }
+
+        public UUID getUUID() {
+            if (isOnline()) {
+                return onlineUser.getPlayer().getUniqueId();
+            } else {
+                return offlineUser.getOfflinePlayer().getUniqueId();
+            }
+        }
+
+        public TonyMode getMode() {
+            if (isOnline()) {
+                return onlineUser.getMode();
+            } else {
+                return offlineUser.getMode();
+            }
+        }
+
+        public LocalDateTime getFirstJoin() {
+            if (isOnline()) {
+                return onlineUser.getFirstJoin();
+            } else {
+                return offlineUser.getFirstJoin();
+            }
+        }
+
+        public LocalDateTime getLastJoin() {
+            if (isOnline()) {
+                return onlineUser.getLastJoin();
+            } else {
+                return offlineUser.getLastJoin();
+            }
+        }
+
+        public String getLastKnownLocation() {
+            if (isOnline()) {
+                return onlineUser.getLastKnownLocation();
+            } else {
+                return offlineUser.getLastKnownLocation();
+            }
+        }
+
+        public String getLastISP() {
+            if (isOnline()) {
+                return onlineUser.getLastISP();
+            } else {
+                return offlineUser.getLastISP();
+            }
+        }
+
+        public String getOperatingSystem() {
+            if (isOnline()) {
+                return onlineUser.getOperatingSystem();
+            } else {
+                return offlineUser.getOperatingSystem();
+            }
+        }
+
+        public String getClientVersion() {
+            if (isOnline()) {
+                return onlineUser.getClientVersion();
+            } else {
+                return offlineUser.getClientVersion();
+            }
+        }
+
+        public Map<String, User.PlayerLoginInfo> getLoginHistory() {
+            if (isOnline()) {
+                return onlineUser.getLoginHistory();
+            } else {
+                return offlineUser.getLoginHistory();
+            }
+        }
+
+        public void save() {
+            if (isOnline()) {
+                onlineUser.save();
+            } else {
+                offlineUser.save();
+            }
+        }
+
+        public int getPlaytime() {
+            if (isOnline()) {
+                return onlineUser.getPlayer().getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / 20 / 60;
+            } else if (offlineUser.getOfflinePlayer().hasPlayedBefore()) {
+                return offlineUser.getOfflinePlayer().getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / 20 / 60;
+            }
+            return 0;
+        }
     }
 }

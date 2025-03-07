@@ -36,6 +36,8 @@ public class User implements Listener {
     private String clientVersion;
     private LocalDateTime firstJoin;
     private LocalDateTime lastJoin;
+    private String nickname;
+    private List<String> nameTagPatterns;
 
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
     private static final Logger LOGGER = Bukkit.getLogger();
@@ -45,10 +47,9 @@ public class User implements Listener {
         this.mode = TonyMode.MEMBER;
         this.loginHistory = new HashMap<>();
         this.playerFile = loadConfig(player.getUniqueId().toString());
-        List<String> list = new ArrayList<>();
-        list.add(player.getDisplayName());
-        this.nameTag = new NameTag(list);
-        spawnNameTags();
+        this.nameTagPatterns = new ArrayList<>();
+        this.nameTag = new NameTag(new ArrayList<>());
+        spawnNameTags(); // Ensure NameTag is spawned
 
         File file = new File(PLUGIN_FOLDER + "/playerdata", player.getUniqueId() + ".yml");
         if (file.exists()) {
@@ -56,6 +57,8 @@ public class User implements Listener {
         } else {
             this.firstJoin = LocalDateTime.now();
             this.lastJoin = LocalDateTime.now();
+            this.nickname = player.getName();
+            this.nameTagPatterns.add("%playername%");
             save();
         }
     }
@@ -101,7 +104,9 @@ public class User implements Listener {
 
     public void killNameTags(){nameTag.killNameTag();}
     public void spawnNameTags(){nameTag.spawnNameTag(player);}
-    public void setNameTags(List<String> lines){(nameTag = new NameTag(lines)).reloadNameTag(player);}
+    public void setNameTags(List<String> lines) {
+        (nameTag = new NameTag(lines)).reloadNameTag(player);
+    }
 
     public void reload() {
         playerFile = loadConfig(player.getUniqueId().toString());
@@ -109,6 +114,23 @@ public class User implements Listener {
 
         String modeStr = playerFile.getString("player.mode", "MEMBER");
         mode = TonyMode.fromString(modeStr);
+
+        nickname = playerFile.getString("player.nickname", player.getName());
+
+        nameTagPatterns = playerFile.getStringList("player.nameTagPatterns");
+        if (nameTagPatterns.isEmpty()) {
+            nameTagPatterns.add("%playername%"); // Default pattern if none is set
+        }
+
+        ConfigurationSection nameTagSection = playerFile.getConfigurationSection("user.nameTag.lines");
+        if (nameTagSection != null) {
+            for (String key : nameTagSection.getKeys(false)) {
+                String lineText = nameTagSection.getString(key, "");
+                nameTag.getLines().put(Integer.parseInt(key), new HashMap<String, Object>() {{
+                    put("text", lineText);
+                }});
+            }
+        }
 
         loginHistory.clear();
         ConfigurationSection loginSection = playerFile.getConfigurationSection("user.logins");
@@ -160,16 +182,19 @@ public class User implements Listener {
             firstJoin = LocalDateTime.now();
             lastJoin = LocalDateTime.now();
         }
+
+        updateNameTag();
     }
 
     public void save() {
         if (playerFile == null) return;
 
-        // Save player data
         playerFile.set("player.name", player.getName());
         playerFile.set("player.uuid", player.getUniqueId().toString());
         playerFile.set("player.playtime", player.getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE));
         playerFile.set("player.mode", mode.toString());
+        playerFile.set("player.nickname", nickname);
+        playerFile.set("player.nameTagPatterns", nameTagPatterns);
 
         playerFile.set("user.lastLocation", lastKnownLocation);
         playerFile.set("user.lastISP", lastISP);
@@ -177,6 +202,11 @@ public class User implements Listener {
         playerFile.set("user.clientVersion", clientVersion);
         playerFile.set("user.firstJoin", firstJoin.toString());
         playerFile.set("user.lastJoin", lastJoin.toString());
+
+        playerFile.set("user.nameTag.lines", null);
+        for (Map.Entry<Integer, HashMap<String, Object>> entry : nameTag.getLines().entrySet()) {
+            playerFile.set("user.nameTag.lines." + entry.getKey(), entry.getValue().get("text"));
+        }
 
         playerFile.set("user.logins", null);
         for (Map.Entry<String, PlayerLoginInfo> entry : loginHistory.entrySet()) {
@@ -223,5 +253,34 @@ public class User implements Listener {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private void updateNameTag() {
+        List<String> formattedPatterns = new ArrayList<>();
+        for (String pattern : nameTagPatterns) {
+            String formattedPattern = pattern
+                    .replace("%playername%", player.getDisplayName())
+                    .replace("%nickname%", nickname)
+                    .replace("%info%", getPlayerInfo());
+            formattedPatterns.add(formattedPattern);
+        }
+        setNameTags(formattedPatterns);
+    }
+
+    private String getPlayerInfo() {
+        return "Mode: " + mode + ", Ping: " + ping;
+    }
+
+    public void setNickname(String nickname) {
+        player.setDisplayName(player.getDisplayName().replace(player.getName(),nickname).replace(this.nickname,nickname));
+        this.nickname = nickname;
+        updateNameTag();
+        save();
+    }
+
+    public void setNameTagPatterns(List<String> patterns) {
+        this.nameTagPatterns = patterns;
+        updateNameTag();
+        save();
     }
 }

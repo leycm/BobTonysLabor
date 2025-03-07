@@ -7,11 +7,14 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Logger;
 
@@ -30,6 +33,8 @@ public class OfflineUser {
     private String clientVersion;
     private LocalDateTime firstJoin;
     private LocalDateTime lastJoin;
+    private String nickname; // Nickname field
+    private @NotNull List<String> nameTagPatterns; // NameTag patterns field
 
     private static final Logger LOGGER = Bukkit.getLogger();
 
@@ -37,6 +42,7 @@ public class OfflineUser {
         this.offlinePlayer = offlinePlayer;
         this.mode = TonyMode.MEMBER;
         this.loginHistory = new HashMap<>();
+        this.nameTagPatterns = new ArrayList<>();
         this.playerFile = loadConfig(offlinePlayer.getUniqueId().toString());
 
         File file = new File(PLUGIN_FOLDER + "/playerdata", offlinePlayer.getUniqueId() + ".yml");
@@ -45,6 +51,8 @@ public class OfflineUser {
         } else {
             this.firstJoin = LocalDateTime.now();
             this.lastJoin = LocalDateTime.now();
+            this.nickname = offlinePlayer.getName(); // Default nickname is the player's name
+            this.nameTagPatterns.add("%playername%"); // Default pattern
             save();
         }
     }
@@ -55,6 +63,15 @@ public class OfflineUser {
 
         String modeStr = playerFile.getString("player.mode", "MEMBER");
         mode = TonyMode.fromString(modeStr);
+
+        // Load nickname
+        nickname = playerFile.getString("player.nickname", offlinePlayer.getName());
+
+        // Load name tag patterns
+        nameTagPatterns = playerFile.getStringList("player.nameTagPatterns");
+        if (nameTagPatterns.isEmpty()) {
+            nameTagPatterns.add("%playername%"); // Default pattern if none is set
+        }
 
         loginHistory.clear();
         ConfigurationSection loginSection = playerFile.getConfigurationSection("user.logins");
@@ -120,6 +137,8 @@ public class OfflineUser {
             playerFile.set("player.playtime", offlinePlayer.getPlayer().getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE));
         }
         playerFile.set("player.mode", mode.toString());
+        playerFile.set("player.nickname", nickname); // Save nickname
+        playerFile.set("player.nameTagPatterns", nameTagPatterns); // Save name tag patterns
 
         playerFile.set("user.lastLocation", lastKnownLocation);
         playerFile.set("user.lastISP", lastISP);
