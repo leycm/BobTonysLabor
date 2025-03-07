@@ -18,10 +18,6 @@ public class NameTag {
 
     public NameTag(List<String> lines){
 
-        for (int i = 0; i < aircrafter; i++) {
-            lines.add("^^ AAirCrafter on Top ^^");
-        }
-
         for (int i = 0; i < lines.size(); i++) {
             HashMap<String, Object> line = new HashMap<>();
             line.put("tag",null);
