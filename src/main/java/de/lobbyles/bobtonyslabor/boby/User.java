@@ -48,8 +48,6 @@ public class User implements Listener {
         this.loginHistory = new HashMap<>();
         this.playerFile = loadConfig(player.getUniqueId().toString());
         this.nameTagPatterns = new ArrayList<>();
-        this.nameTag = new NameTag(new ArrayList<>());
-        spawnNameTags(); // Ensure NameTag is spawned
 
         File file = new File(PLUGIN_FOLDER + "/playerdata", player.getUniqueId() + ".yml");
         if (file.exists()) {
@@ -61,6 +59,9 @@ public class User implements Listener {
             this.nameTagPatterns.add("%playername%");
             save();
         }
+        
+        this.nameTag = new NameTag(nameTagPatterns)
+        spawnNameTags(); // Ensure NameTag is spawned
     }
 
     @Getter
