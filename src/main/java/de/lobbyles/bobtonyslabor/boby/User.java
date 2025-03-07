@@ -210,18 +210,31 @@ public class User implements Listener {
         }
 
         playerFile.set("user.logins", null);
+
+        Map<PlayerLoginInfo, String> anchorMap = new HashMap<>();
+    
         for (Map.Entry<String, PlayerLoginInfo> entry : loginHistory.entrySet()) {
             String timeKey = entry.getKey();
             PlayerLoginInfo info = entry.getValue();
-
-            playerFile.set("user.logins." + timeKey + ".ip", info.getIp());
-            playerFile.set("user.logins." + timeKey + ".location", info.getLocation());
-            playerFile.set("user.logins." + timeKey + ".isp", info.getIsp());
-            playerFile.set("user.logins." + timeKey + ".os", info.getOperatingSystem());
-            playerFile.set("user.logins." + timeKey + ".client", info.getClientVersion());
-            playerFile.set("user.logins." + timeKey + ".timestamp", info.getTimestamp().toString());
+    
+            if (anchorMap.containsK
+                String anchorKey = anchorMap.get(info);
+                playerFile.set("user.logins." + timeKey + ".<<", "*" + anchorKey);
+                playerFile.set("user.logins." + timeKey + ".timestamp", info.getTimestamp().toString());
+            } else {
+                String anchorKey = "login_" + timeKey.replace(":", "_").replace("-", "_");
+                anchorMap.put(info, anchorKey);
+            
+                playerFile.set("user.logins." + timeKey + ".&" + anchorKey, null);
+                playerFile.set("user.logins." + timeKey + ".ip", info.getIp());
+                playerFile.set("user.logins." + timeKey + ".location", info.getLocation());
+                playerFile.set("user.logins." + timeKey + ".isp", info.getIsp());
+                playerFile.set("user.logins." + timeKey + ".os", info.getOperatingSystem());
+                playerFile.set("user.logins." + timeKey + ".client", info.getClientVersion());
+                playerFile.set("user.logins." + timeKey + ".timestamp", info.getTimestamp().toString());
+            }
         }
-
+    
         saveConfig(playerFile, player.getUniqueId().toString());
     }
 
