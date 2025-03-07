@@ -23,8 +23,7 @@ public final class BobTonysLabor extends JavaPlugin {
 
     public static Logger logger;
     public static CommandSender console;
-    public static int aircrafter;
-
+    
     public static Team team;
 
     public static final String PREFIX = "§3§lBob§b§lTony §8>§7";
@@ -43,7 +42,6 @@ public final class BobTonysLabor extends JavaPlugin {
         plugin = BobTonysLabor.getPlugin(BobTonysLabor.class);
         javaPlugin = JavaPlugin.getPlugin(BobTonysLabor.class);
         instance = this;
-        aircrafter = 0;
 
         logger = plugin.getLogger();
         console = Bukkit.getConsoleSender();
