@@ -73,4 +73,12 @@ public final class UserBase {
         return result.size() > 0 ? result : null;
     }
 
+    public static User uloadAllUser() {
+        for (User user : users) {
+            user.killNameTags();
+            user.kick("Der Server startet neu. Bitte versuche es in 2 Minuten erneut.","BobTony's Stimmen");
+        }
+        return null;
+    }
+
 }

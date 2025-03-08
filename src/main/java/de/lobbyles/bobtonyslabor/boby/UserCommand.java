@@ -1,5 +1,6 @@
 package de.lobbyles.bobtonyslabor.boby;
 
+import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -12,6 +13,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static java.lang.Integer.parseInt;
 
 public class UserCommand implements CommandExecutor, TabCompleter {
 
@@ -192,8 +195,14 @@ public class UserCommand implements CommandExecutor, TabCompleter {
                     }
                     break;
                 case "nickname":
+                    if(value.equalsIgnoreCase("remove" +
+                            "")){
+                        value = userWrapper.getOnlineUser().getPlayer().getName();
+                    }
                     if (userWrapper.isOnline()) {
                         userWrapper.getOnlineUser().setNickname(value);
+                        userWrapper.getOnlineUser().reloadNameTags();
+                        userWrapper.getOnlineUser().reloadTabName();
                     } else {
                         userWrapper.getOfflineUser().setNickname(value);
                     }
@@ -201,7 +210,7 @@ public class UserCommand implements CommandExecutor, TabCompleter {
                     break;
                 case "playtime":
                     if (userWrapper.isOnline()) {
-                        int minutes = Integer.parseInt(value);
+                        int minutes = parseInt(value);
                         int ticks = minutes * 20 * 60;
                         userWrapper.getOnlineUser().getPlayer().setStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE, ticks);
                         success = true;
@@ -222,52 +231,58 @@ public class UserCommand implements CommandExecutor, TabCompleter {
                 case "line":
                     if (userWrapper.isOnline()) {
                         if (args.length < 7) {
-                            sender.sendMessage(ERROR_PREFIX + "Benutzung: /user " + args[0] + " <spielername> profile set line <position/under/over> <text>");
+                            sender.sendMessage(ERROR_PREFIX + "Benutzung: /user " + args[0] + " <spielername> profile set line <position/under/over/remove> <text>");
                             return;
                         }
 
-                        String positionArg = args[5].toLowerCase();
-                        String lineText = String.join(" ", Arrays.copyOfRange(args, 5, args.length));
+                        String action = args[5].toLowerCase();
+                        String lineText = String.join(" ", Arrays.copyOfRange(args, 6, args.length));
 
-                        HashMap<Integer, HashMap<String, Object>> lines = userWrapper.getOnlineUser().getNameTag().getLines();
-                        List<String> linesList = new ArrayList<>();
+                        List<String> patterns = userWrapper.getOnlineUser().getNameTagPatterns();
 
-                        for (int i = 0; i < lines.size(); i++) {
-                            HashMap<String, Object> line = lines.get(i);
-                            linesList.add((String) line.get("text"));
-                        }
-
-                        switch (positionArg) {
+                        switch (action) {
                             case "under":
-                                if (linesList.isEmpty()) {
-                                    linesList.add(lineText);
-                                } else {
-                                    linesList.add(lineText);
-                                }
+                                patterns.add(0, lineText);
+                                success = true;
                                 break;
                             case "over":
-                                if (linesList.isEmpty()) {
-                                    linesList.add(lineText);
-                                } else {
-                                    linesList.add(0, lineText);
+                                patterns.add(lineText);
+                                success = true;
+                                break;
+                            case "remove":
+                                try {
+                                    int lineNumber = parseInt(lineText) - 1;
+                                    if (lineNumber < 0 || lineNumber >= patterns.size()) {
+                                        sender.sendMessage(ERROR_PREFIX + "Ungültige Position: " + (lineNumber + 1));
+                                        return;
+                                    }
+                                    patterns.remove(lineNumber);
+                                    success = true;
+                                } catch (NumberFormatException e) {
+                                    sender.sendMessage(ERROR_PREFIX + "Ungültige Position: " + lineText);
+                                    return;
                                 }
                                 break;
                             default:
                                 try {
-                                    int lineNumber = Integer.parseInt(positionArg) - 1;
-                                    if (lineNumber < 0 || lineNumber >= linesList.size()) {
+                                    int lineNumber = parseInt(action) - 1;
+                                    if (lineNumber < 0 || lineNumber >= patterns.size()) {
                                         sender.sendMessage(ERROR_PREFIX + "Ungültige Position: " + (lineNumber + 1));
                                         return;
                                     }
-                                    linesList.set(lineNumber, lineText);
+                                    patterns.set(lineNumber, lineText);
+                                    success = true;
                                 } catch (NumberFormatException e) {
-                                    sender.sendMessage(ERROR_PREFIX + "Ungültige Position: " + positionArg);
+                                    sender.sendMessage(ERROR_PREFIX + "Ungültige Position: " + action);
                                     return;
                                 }
                                 break;
                         }
-                        userWrapper.getOnlineUser().setNameTags(linesList);
-                        success = true;
+
+                        if (success) {
+                            userWrapper.getOnlineUser().setNameTags(patterns);
+                            userWrapper.getOnlineUser().spawnNameTags();
+                        }
                     } else {
                         sender.sendMessage(ERROR_PREFIX + "Diese Einstellung kann nicht für Offline-Spieler geändert werden.");
                         return;
@@ -481,6 +496,8 @@ public class UserCommand implements CommandExecutor, TabCompleter {
             return getDetailedOptionCompletions(args);
         } else if (args.length == 6) {
             return getSettingValueCompletions(args);
+        } else if (args.length == 7) {
+            return getSettingValueCompletions(args);
         }
 
         return new ArrayList<>();
@@ -540,24 +557,46 @@ public class UserCommand implements CommandExecutor, TabCompleter {
             UserWrapper userWrapper = findUser(args[1], false);
             if (userWrapper != null) {
                 switch (args[4].toLowerCase()) {
-                    case "name":
-                        return Collections.singletonList(userWrapper.getName());
+                    case "nickname":
+                        return List.of(userWrapper.getNickname(), "remove");
                     case "playtime":
                         return Collections.singletonList(String.valueOf(userWrapper.getPlaytime()));
                     case "mode":
-                        return Collections.singletonList(userWrapper.getMode().toString());
+                        return Arrays.stream(TonyMode.values())
+                                .map(TonyMode::toString)
+                                .collect(Collectors.toList());
                     case "line":
                         if (userWrapper.isOnline()) {
-                            List<String> completions = new ArrayList<>();
-                            completions.add("under");
-                            completions.add("over");
-                            HashMap<Integer, HashMap<String, Object>> lines = userWrapper.getOnlineUser().getNameTag().getLines();
-                            for (int i = 0; i < lines.size(); i++) {
-                                HashMap<String, Object> line = lines.get(i);
-                                completions.add((i + 1) + " " + line.get("text"));
-                            }
+                            if (args.length == 6) {
+                                List<String> completions = new ArrayList<>();
+                                completions.add("under");
+                                completions.add("over");
+                                completions.add("remove");
 
-                            return getPartialMatches(args[5], completions);
+                                List<String> patterns = userWrapper.getOnlineUser().getNameTagPatterns();
+                                for (int i = 0; i < patterns.size(); i++) {
+                                    completions.add(String.valueOf(i + 1));
+                                }
+
+                                return getPartialMatches(args[5], completions);
+                            } else if (args.length == 7) {
+                                String action = args[5].toLowerCase();
+
+                                if (action.equals("under") || action.equals("over")) {
+                                    return Collections.singletonList("<text>");
+                                } else if (action.matches("-?\\d+")) {
+                                    return Collections.singletonList(userWrapper.getOnlineUser().getNameTagPatterns().get(parseInt(action)-1));
+                                } else if (action.equals("remove")) {
+                                    List<String> patterns = userWrapper.getOnlineUser().getNameTagPatterns();
+                                    List<String> completions = new ArrayList<>();
+                                    for (int i = 0; i < patterns.size(); i++) {
+                                        completions.add(String.valueOf(i + 1));
+                                    }
+                                    return getPartialMatches(args[6], completions);
+                                } else {
+                                    return Collections.singletonList("<text>");
+                                }
+                            }
                         }
                         break;
                 }
@@ -578,6 +617,7 @@ public class UserCommand implements CommandExecutor, TabCompleter {
                 .collect(Collectors.toList());
     }
 
+    @Getter
     private static class UserWrapper {
         private final User onlineUser;
         private final OfflineUser offlineUser;
@@ -589,14 +629,6 @@ public class UserCommand implements CommandExecutor, TabCompleter {
 
         public boolean isOnline() {
             return onlineUser != null;
-        }
-
-        public User getOnlineUser() {
-            return onlineUser;
-        }
-
-        public OfflineUser getOfflineUser() {
-            return offlineUser;
         }
 
         public String getNickname() {
@@ -704,6 +736,23 @@ public class UserCommand implements CommandExecutor, TabCompleter {
                 return offlineUser.getOfflinePlayer().getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE) / 20 / 60;
             }
             return 0;
+        }
+
+        public List<String> getNameTagPatterns() {
+            if (isOnline()) {
+                return onlineUser.getNameTagPatterns();
+            } else {
+                return offlineUser.getNameTagPatterns();
+            }
+        }
+
+        public void setNameTagPatterns(List<String> patterns) {
+            if (isOnline()) {
+                onlineUser.setNameTagPatterns(patterns);
+                onlineUser.getNameTag().reloadNameTag(onlineUser.getPlayer());
+            } else {
+                offlineUser.setNameTagPatterns(patterns);
+            }
         }
     }
 }

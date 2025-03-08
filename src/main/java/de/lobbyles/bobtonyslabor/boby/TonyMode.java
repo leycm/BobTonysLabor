@@ -1,10 +1,12 @@
 package de.lobbyles.bobtonyslabor.boby;
 
 public enum TonyMode {
-    BANNED_MEMBER(0),
-    MEMBER(1),
-    SIGMA(2),
-    BOB(3);
+    HARD_TRAPPED(0),
+    BANNED_MEMBER(1),
+    TRAPPED(1),
+    MEMBER(2),
+    SIGMA(3),
+    BOB(4);
 
     private int lvl;
 

@@ -2,6 +2,9 @@ package de.lobbyles.bobtonyslabor.boby;
 
 import lombok.Getter;
 import lombok.Setter;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -59,9 +62,10 @@ public class User implements Listener {
             this.nameTagPatterns.add("%playername%");
             save();
         }
-        
-        this.nameTag = new NameTag(nameTagPatterns)
-        spawnNameTags(); // Ensure NameTag is spawned
+
+        this.nameTag = new NameTag(nameTagPatterns, this);
+        spawnNameTags();
+        reloadTabName();
     }
 
     @Getter
@@ -83,7 +87,6 @@ public class User implements Listener {
             this.timestamp = LocalDateTime.now();
         }
 
-        // For loading from config
         public PlayerLoginInfo(String ip, String location, String isp, String os, String clientVersion, LocalDateTime timestamp) {
             this.ip = ip;
             this.location = location;
@@ -104,10 +107,9 @@ public class User implements Listener {
     }
 
     public void killNameTags(){nameTag.killNameTag();}
-    public void spawnNameTags(){nameTag.spawnNameTag(player);}
-    public void setNameTags(List<String> lines) {
-        (nameTag = new NameTag(lines)).reloadNameTag(player);
-    }
+    public void spawnNameTags(){nameTag = new NameTag(nameTagPatterns, this); nameTag.spawnNameTag(player);}
+    public void reloadNameTags(){nameTag.reloadNameTag(player);}
+    public void setNameTags(List<String> lines) {killNameTags();(nameTag = new NameTag(lines,this)).reloadNameTag(player);}
 
     public void reload() {
         playerFile = loadConfig(player.getUniqueId().toString());
@@ -119,19 +121,14 @@ public class User implements Listener {
         nickname = playerFile.getString("player.nickname", player.getName());
 
         nameTagPatterns = playerFile.getStringList("player.nameTagPatterns");
+
         if (nameTagPatterns.isEmpty()) {
-            nameTagPatterns.add("%playername%"); // Default pattern if none is set
+            nameTagPatterns.add("%playername%");
         }
 
-        ConfigurationSection nameTagSection = playerFile.getConfigurationSection("user.nameTag.lines");
-        if (nameTagSection != null) {
-            for (String key : nameTagSection.getKeys(false)) {
-                String lineText = nameTagSection.getString(key, "");
-                nameTag.getLines().put(Integer.parseInt(key), new HashMap<String, Object>() {{
-                    put("text", lineText);
-                }});
-            }
-        }
+        nameTag = new NameTag(nameTagPatterns, this);
+
+        setNameTags(nameTagPatterns);
 
         loginHistory.clear();
         ConfigurationSection loginSection = playerFile.getConfigurationSection("user.logins");
@@ -184,7 +181,7 @@ public class User implements Listener {
             lastJoin = LocalDateTime.now();
         }
 
-        updateNameTag();
+        setNameTags(nameTagPatterns);
     }
 
     public void save() {
@@ -204,27 +201,21 @@ public class User implements Listener {
         playerFile.set("user.firstJoin", firstJoin.toString());
         playerFile.set("user.lastJoin", lastJoin.toString());
 
-        playerFile.set("user.nameTag.lines", null);
-        for (Map.Entry<Integer, HashMap<String, Object>> entry : nameTag.getLines().entrySet()) {
-            playerFile.set("user.nameTag.lines." + entry.getKey(), entry.getValue().get("text"));
-        }
-
         playerFile.set("user.logins", null);
-
         Map<PlayerLoginInfo, String> anchorMap = new HashMap<>();
-    
+
         for (Map.Entry<String, PlayerLoginInfo> entry : loginHistory.entrySet()) {
             String timeKey = entry.getKey();
             PlayerLoginInfo info = entry.getValue();
-    
-            if (anchorMap.containsK
+
+            if (anchorMap.containsKey(info)) {
                 String anchorKey = anchorMap.get(info);
                 playerFile.set("user.logins." + timeKey + ".<<", "*" + anchorKey);
                 playerFile.set("user.logins." + timeKey + ".timestamp", info.getTimestamp().toString());
             } else {
                 String anchorKey = "login_" + timeKey.replace(":", "_").replace("-", "_");
                 anchorMap.put(info, anchorKey);
-            
+
                 playerFile.set("user.logins." + timeKey + ".&" + anchorKey, null);
                 playerFile.set("user.logins." + timeKey + ".ip", info.getIp());
                 playerFile.set("user.logins." + timeKey + ".location", info.getLocation());
@@ -234,7 +225,7 @@ public class User implements Listener {
                 playerFile.set("user.logins." + timeKey + ".timestamp", info.getTimestamp().toString());
             }
         }
-    
+
         saveConfig(playerFile, player.getUniqueId().toString());
     }
 
@@ -269,32 +260,59 @@ public class User implements Listener {
         }
     }
 
-    private void updateNameTag() {
-        List<String> formattedPatterns = new ArrayList<>();
-        for (String pattern : nameTagPatterns) {
-            String formattedPattern = pattern
-                    .replace("%playername%", player.getDisplayName())
-                    .replace("%nickname%", nickname)
-                    .replace("%info%", getPlayerInfo());
-            formattedPatterns.add(formattedPattern);
-        }
-        setNameTags(formattedPatterns);
-    }
-
-    private String getPlayerInfo() {
-        return "Mode: " + mode + ", Ping: " + ping;
-    }
-
     public void setNickname(String nickname) {
         player.setDisplayName(player.getDisplayName().replace(player.getName(),nickname).replace(this.nickname,nickname));
+        player.setPlayerListName(player.getDisplayName());
         this.nickname = nickname;
-        updateNameTag();
         save();
     }
 
     public void setNameTagPatterns(List<String> patterns) {
         this.nameTagPatterns = patterns;
-        updateNameTag();
+        setNameTags(nameTagPatterns);
         save();
     }
+
+    public void reloadTabName(){
+        player.setPlayerListName(nickname);
+    }
+
+    public String getPlayerPrefix() {
+        net.luckperms.api.model.user.User lkuser = luckperms.getUserManager().getUser(player.getUniqueId());
+        if (lkuser != null) {
+            String prefix = lkuser.getCachedData().getMetaData().getPrefix();
+            return prefix != null ? prefix : "Kein Prefix";
+        }
+        return "Kein User";
+    }
+
+    public void kick(String reason, String kickedBy) {
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+        String time = now.format(formatter);
+
+        String[] reasonLines = splitReason(reason, 32);
+
+        Component kickMessage = Component.text()
+                .append(Component.text("BobLabor\n", NamedTextColor.DARK_AQUA, TextDecoration.BOLD))
+                .append(Component.text("--------------------------------\n", NamedTextColor.GRAY, TextDecoration.STRIKETHROUGH))
+                .append(Component.text("Du wurdest gekickt!\n", NamedTextColor.DARK_GRAY))
+                .append(Component.text(reasonLines[0] + "\n", NamedTextColor.WHITE)) // Erste Zeile des Grundes
+                .append(reasonLines.length > 1 ? Component.text(reasonLines[1] + "\n", NamedTextColor.WHITE) : Component.empty()) // Zweite Zeile (falls vorhanden)
+                .append(Component.text("--------------------------------\n", NamedTextColor.GRAY, TextDecoration.STRIKETHROUGH))
+                .append(Component.text(kickedBy + " - " + time + "\n", NamedTextColor.DARK_AQUA))
+                .build();
+
+        player.kick(kickMessage);
+    }
+
+    private String[] splitReason(String reason, int maxLineLength) {
+        if (reason.length() <= maxLineLength) {return new String[]{reason};}
+        int splitIndex = reason.lastIndexOf(' ', maxLineLength);
+        if (splitIndex <= 0) {splitIndex = maxLineLength;}
+        String line1 = reason.substring(0, splitIndex).trim();
+        String line2 = reason.substring(splitIndex).trim();
+        return new String[]{line1, line2};
+    }
+    
 }
