@@ -1,12 +1,15 @@
 package de.lobbyles.bobtonyslabor;
 
+import de.lobbyles.bobtonyslabor.boby.UserBase;
 import de.lobbyles.bobtonyslabor.boby.UserCommand;
 import de.lobbyles.bobtonyslabor.boby.UserListener;
-import de.lobbyles.bobtonyslabor.essetials.Mode;
+import de.lobbyles.bobtonyslabor.lobby.LobbyEvents;
+import net.luckperms.api.LuckPerms;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.PluginManager;
+import org.bukkit.plugin.RegisteredServiceProvider;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scoreboard.Scoreboard;
 import org.bukkit.scoreboard.ScoreboardManager;
@@ -20,6 +23,7 @@ public final class BobTonysLabor extends JavaPlugin {
     public static JavaPlugin javaPlugin;
     public static Plugin plugin;
     public static BobTonysLabor instance;
+    public static LuckPerms luckperms;
 
     public static Logger logger;
     public static CommandSender console;
@@ -48,39 +52,41 @@ public final class BobTonysLabor extends JavaPlugin {
 
         createVanillaStyleTeam();
 
-        List<String> enable = new ArrayList<>();
-        enable.add(registerListener());
-        enable.add(registerCommands());
-        consolFeedback(enable);
+        RegisteredServiceProvider<LuckPerms> provider = Bukkit.getServicesManager().getRegistration(LuckPerms.class);
+        if (provider != null) {luckperms = provider.getProvider();}
+
+        List<String> enableInfo = new ArrayList<>();
+        enableInfo.add(registerListener());
+        enableInfo.add(registerCommands());
+        consolFeedback(enableInfo);
     }
 
     @Override
     public void onDisable() {
 
         List<String> disableInfo = new ArrayList<>();
-
+        disableInfo.add(unloadUsers());
         consolFeedback(disableInfo);
     }
 
     public void onReload() {
-
-        List<String> disableInfo = new ArrayList<>();
-
-        consolFeedback(disableInfo);
+        List<String> reloadInfo = new ArrayList<>();
+        reloadInfo.add("");
+        consolFeedback(reloadInfo);
     }
 
-    public String registerListener(){
+    private String registerListener(){
         PluginManager pluginManager = Bukkit.getPluginManager();
         try{
+            pluginManager.registerEvents(new LobbyEvents(),this);
             pluginManager.registerEvents(new UserListener(),this);
-            pluginManager.registerEvents(new Mode(),this);
             return "\u001B[90mLoading eventlistener...\u001B[0m";
         } catch (Exception e){
             return c6 + "Fail to load eventlistener\n" + e;
         }
     }
 
-    public String loadConfig(){
+    private String loadConfig(){
         try{
             return "\u001B[90mLoading configs...\u001B[0m";
         } catch (Exception e){
@@ -88,25 +94,31 @@ public final class BobTonysLabor extends JavaPlugin {
         }
     }
 
-    public String registerCommands(){
+    private String registerCommands(){
         try{
             getCommand("user").setExecutor(new UserCommand());
-            getCommand("mode").setExecutor(new Mode());
             return "\u001B[90mLoading commands...\u001B[0m";
         } catch (Exception e){
             return c6 + "Fail to load commands\n" + e;
         }
     }
 
-
+    private String unloadUsers(){
+        try{
+            UserBase.uloadAllUser();
+            return "\u001B[90mSaving users...\u001B[0m";
+        } catch (Exception e){
+            return c6 + "Fail to unload users\n" + e;
+        }
+    }
 
     private void consolFeedback(List<String> list) {
 
         if(!Bukkit.getPluginManager().isPluginEnabled("BobTony")){
-            console.sendMessage(c3 + "   __  "+cb+"  ___  " + c7 + "                         " + c0);
-            console.sendMessage(c3 + "  |__| "+cb+"   |   " + c3 + "§3§lBob§b§lTony " +c0+ "v-1.0.1         " + c0);
-            console.sendMessage(c3 + "  |__| "+cb+"   |   " + c8 + "Running on Bukkit - "+cb+"Paper" + c0);
-            console.sendMessage(c3 + "       "+cb+"       " + c7 + "                         " + c0);
+            console.sendMessage(c3 + "   __ "+cb+" ___  " + c7 + "                         " + c0);
+            console.sendMessage(c3 + "  |__\\"+cb+"  |   " + c3 + "§3§lBob§b§lTony " +c0+ "v-1.0.1         " + c0);
+            console.sendMessage(c3 + "  |__/"+cb+"  |   " + c8 + "Running on Bukkit - "+cb+"Paper" + c0);
+            console.sendMessage(c3 + "      "+cb+"      " + c7 + "                         " + c0);
             for (String s  : list) {
                 console.sendMessage( CONSOLE_PREFIX+s);
             }

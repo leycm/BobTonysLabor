@@ -33,8 +33,8 @@ public class OfflineUser {
     private String clientVersion;
     private LocalDateTime firstJoin;
     private LocalDateTime lastJoin;
-    private String nickname; // Nickname field
-    private @NotNull List<String> nameTagPatterns; // NameTag patterns field
+    private String nickname;
+    private @NotNull List<String> nameTagPatterns;
 
     private static final Logger LOGGER = Bukkit.getLogger();
 
@@ -51,8 +51,8 @@ public class OfflineUser {
         } else {
             this.firstJoin = LocalDateTime.now();
             this.lastJoin = LocalDateTime.now();
-            this.nickname = offlinePlayer.getName(); // Default nickname is the player's name
-            this.nameTagPatterns.add("%playername%"); // Default pattern
+            this.nickname = offlinePlayer.getName();
+            this.nameTagPatterns.add("%playername%");
             save();
         }
     }
@@ -64,13 +64,11 @@ public class OfflineUser {
         String modeStr = playerFile.getString("player.mode", "MEMBER");
         mode = TonyMode.fromString(modeStr);
 
-        // Load nickname
         nickname = playerFile.getString("player.nickname", offlinePlayer.getName());
 
-        // Load name tag patterns
         nameTagPatterns = playerFile.getStringList("player.nameTagPatterns");
         if (nameTagPatterns.isEmpty()) {
-            nameTagPatterns.add("%playername%"); // Default pattern if none is set
+            nameTagPatterns.add("%playername%");
         }
 
         loginHistory.clear();
@@ -130,15 +128,14 @@ public class OfflineUser {
     public void save() {
         if (playerFile == null) return;
 
-        // Save player data
         playerFile.set("player.name", offlinePlayer.getName());
         playerFile.set("player.uuid", offlinePlayer.getUniqueId().toString());
         if (offlinePlayer.isOnline() && offlinePlayer.getPlayer() != null) {
             playerFile.set("player.playtime", offlinePlayer.getPlayer().getStatistic(org.bukkit.Statistic.PLAY_ONE_MINUTE));
         }
         playerFile.set("player.mode", mode.toString());
-        playerFile.set("player.nickname", nickname); // Save nickname
-        playerFile.set("player.nameTagPatterns", nameTagPatterns); // Save name tag patterns
+        playerFile.set("player.nickname", nickname);
+        playerFile.set("player.nameTagPatterns", nameTagPatterns);
 
         playerFile.set("user.lastLocation", lastKnownLocation);
         playerFile.set("user.lastISP", lastISP);
