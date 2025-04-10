@@ -32,7 +32,7 @@ public final class BobTonysLabor extends JavaPlugin {
 
     public static final String PREFIX = "§3§lBob§b§lTony §8>§7";
     public static final String CONSOLE_PREFIX = "\u001B[0m[BobTony][BobTonyLabor] \u001B[0m";
-    public static final String PLUGIN_FOLDER = "../bobtony";
+    public static final String PLUGIN_FOLDER = "../../../bobtony";
 
     String c0 = "\u001B[0m";
     String c3 = "\u001B[36m";
