@@ -51,7 +51,7 @@ public class LobbyEvents implements Listener {
         Player p = (Player) event.getPlayer();
         User u = UserBase.getUser(p);
 
-        if(u.getMode().lvl() == 0){
+        if(u == null || u.getMode().lvl() == 0){
             Inventory trap = Bukkit.createInventory(null,9*1,"TrapHaHa");
             p.openInventory(trap);
         }
